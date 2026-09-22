@@ -482,11 +482,18 @@ if tk is not None:
             verified_pairs = int(display["verified_pairs"])
             file_issues = int(display["file_issues"])
             report_available = bool(
-                self.report_manager.temp_report_path
+                verified_pairs > 0
+                and self.report_manager.temp_report_path
                 and self.report_manager.temp_report_path.exists()
             )
             self._set_running_state(False, report_available=report_available)
-            self.progress_var.set(100)
+            self.progress_var.set(
+                100 if verified_pairs > 0 else 0
+            )
+            workbook_exists = bool(
+                self.report_manager.temp_report_path
+                and self.report_manager.temp_report_path.exists()
+            )
 
             if verified_pairs == 0:
                 self.status_var.set("Verification finished, but no file pairs were successfully verified.")
@@ -497,8 +504,10 @@ if tk is not None:
                 )
             elif file_issues:
                 self.status_var.set(f"Verification completed with {file_issues} file-level issue(s).")
-            else:
+            elif workbook_exists:
                 self.status_var.set("Verification completed. Report is ready to save.")
+            else:
+                self.status_var.set("Verification completed.")
 
         def _verification_failed(self, error: Exception) -> None:
             self.report_manager.clear_temp_report()

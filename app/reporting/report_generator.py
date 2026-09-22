@@ -320,10 +320,9 @@ def _write_pair_sheet(
 ) -> None:
     bom1_source = "excel" if bom1_type == "Excel" else "pdf"
     bom2_source = "pdf" if bom1_source == "excel" else "excel"
-    bom1_records = _records_for_source(pair_result, bom1_source)
-    bom2_records = _records_for_source(pair_result, bom2_source)
-    row_count = max(len(bom1_records), len(bom2_records), 1)
-    row_audits = _build_row_audits(pair_result, bom1_records, bom2_records, bom1_source, bom2_source, row_count)
+    display_rows = _build_display_rows(pair_result, bom1_source, bom2_source)
+    row_count = max(len(display_rows), 1)
+    row_audits = _build_row_audits(display_rows, bom1_source, bom2_source)
 
     worksheet.sheet_view.showGridLines = False
     worksheet.freeze_panes = "A2"
@@ -341,10 +340,12 @@ def _write_pair_sheet(
     )
     worksheet["A1"].comment = Comment(metadata, "Excel PDF BOM Verifier")
 
-    for offset in range(row_count):
+    rows_to_render = display_rows or [{"bom1": None, "bom2": None, "result": None}]
+
+    for offset, display_row in enumerate(rows_to_render):
         row = offset + 2
-        bom1_record = bom1_records[offset] if offset < len(bom1_records) else None
-        bom2_record = bom2_records[offset] if offset < len(bom2_records) else None
+        bom1_record = display_row["bom1"]
+        bom2_record = display_row["bom2"]
         audit = row_audits[offset]
 
         _write_source_row(worksheet, row, 1, bom1_record)
@@ -381,70 +382,170 @@ def _records_for_source(pair_result: dict[str, Any], source: str) -> list[dict[s
 
 
 def _build_row_audits(
-    pair_result: dict[str, Any],
-    bom1_records: list[dict[str, Any]],
-    bom2_records: list[dict[str, Any]],
+    display_rows: list[dict[str, Any]],
     bom1_source: str,
     bom2_source: str,
-    row_count: int,
 ) -> list[dict[str, str]]:
-    verification = pair_result.get("verification") or {}
-    result_by_part: dict[str, dict[str, Any]] = {}
-    blank_excel_reviews: dict[Any, dict[str, Any]] = {}
-
-    for result in verification.get("results", []):
-        part_number = result.get("part_number")
-        if part_number:
-            result_by_part[normalize_part_number(part_number)] = result
-        elif result.get("status") == "REVIEW":
-            for excel_row in result.get("excel_rows", []):
-                blank_excel_reviews[excel_row] = result
-
     audits: list[dict[str, str]] = []
 
-    for index in range(row_count):
-        bom1_record = bom1_records[index] if index < len(bom1_records) else None
-        bom2_record = bom2_records[index] if index < len(bom2_records) else None
-        bom1_lookup = _lookup_verification_result(bom1_record, bom1_source, result_by_part, blank_excel_reviews)
-        bom2_lookup = _lookup_verification_result(bom2_record, bom2_source, result_by_part, blank_excel_reviews)
-        qty_result = _qty_result_text(bom1_lookup or bom2_lookup, bom1_record or bom2_record)
+    for display_row in display_rows:
+        bom1_record = display_row["bom1"]
+        bom2_record = display_row["bom2"]
+        result = display_row["result"]
+        qty_result = _qty_result_text(result, bom1_record or bom2_record)
 
         audits.append(
             {
                 "bom1_normalized": _normalized_part(bom1_record),
                 "bom2_normalized": _normalized_part(bom2_record),
-                "bom1_result": _existence_text(bom1_lookup, bom1_source, bom1_record),
+                "bom1_result": _existence_text(result, bom1_source, bom1_record),
                 "qty_result": qty_result,
-                "bom2_result": _existence_text(bom2_lookup, bom2_source, bom2_record),
+                "bom2_result": _existence_text(result, bom2_source, bom2_record),
             }
         )
 
     return audits
 
 
-def _lookup_verification_result(
-    record: dict[str, Any] | None,
-    source: str,
-    result_by_part: dict[str, dict[str, Any]],
-    blank_excel_reviews: dict[Any, dict[str, Any]],
-) -> dict[str, Any] | None:
-    if not record:
-        return None
-
-    normalized = _normalized_part(record)
-    if normalized:
-        return result_by_part.get(normalized)
-
-    if source == "excel":
-        return blank_excel_reviews.get(record.get("excel_row"))
-
-    return None
-
-
 def _normalized_part(record: dict[str, Any] | None) -> str:
     if not record:
         return ""
     return normalize_part_number(record.get("part_number"))
+
+
+def _build_display_rows(
+    pair_result: dict[str, Any],
+    bom1_source: str,
+    bom2_source: str,
+) -> list[dict[str, Any]]:
+    bom1_records = _records_for_source(pair_result, bom1_source)
+    bom2_records = _records_for_source(pair_result, bom2_source)
+    verification_results = list((pair_result.get("verification") or {}).get("results", []))
+
+    if not verification_results:
+        row_count = max(len(bom1_records), len(bom2_records), 1)
+        return [
+            {
+                "bom1": bom1_records[index] if index < len(bom1_records) else None,
+                "bom2": bom2_records[index] if index < len(bom2_records) else None,
+                "result": None,
+            }
+            for index in range(row_count)
+        ]
+
+    rows: list[dict[str, Any]] = []
+    used_bom1: set[int] = set()
+    used_bom2: set[int] = set()
+
+    for key, results in _group_verification_results(verification_results):
+        left_matches = _matching_source_records(
+            bom1_records,
+            bom1_source,
+            key,
+            used_bom1,
+        )
+        right_matches = _matching_source_records(
+            bom2_records,
+            bom2_source,
+            key,
+            used_bom2,
+        )
+
+        for record in left_matches:
+            used_bom1.add(id(record))
+        for record in right_matches:
+            used_bom2.add(id(record))
+
+        group_row_count = max(
+            len(left_matches),
+            len(right_matches),
+            len(results),
+            1,
+        )
+
+        for index in range(group_row_count):
+            rows.append(
+                {
+                    "bom1": left_matches[index] if index < len(left_matches) else None,
+                    "bom2": right_matches[index] if index < len(right_matches) else None,
+                    "result": results[index] if index < len(results) else results[-1],
+                }
+            )
+
+    remaining_bom1 = [
+        record for record in bom1_records if id(record) not in used_bom1
+    ]
+    remaining_bom2 = [
+        record for record in bom2_records if id(record) not in used_bom2
+    ]
+
+    for index in range(max(len(remaining_bom1), len(remaining_bom2), 0)):
+        rows.append(
+            {
+                "bom1": remaining_bom1[index] if index < len(remaining_bom1) else None,
+                "bom2": remaining_bom2[index] if index < len(remaining_bom2) else None,
+                "result": None,
+            }
+        )
+
+    return rows
+
+
+def _group_verification_results(
+    verification_results: list[dict[str, Any]],
+) -> list[tuple[tuple[str, Any], list[dict[str, Any]]]]:
+    grouped: list[tuple[tuple[str, Any], list[dict[str, Any]]]] = []
+    positions: dict[tuple[str, Any], int] = {}
+
+    for result in verification_results:
+        key = _verification_result_key(result)
+        if key in positions:
+            grouped[positions[key]][1].append(result)
+        else:
+            positions[key] = len(grouped)
+            grouped.append((key, [result]))
+
+    return grouped
+
+
+def _verification_result_key(
+    result: dict[str, Any],
+) -> tuple[str, Any]:
+    normalized_part = normalize_part_number(result.get("part_number"))
+    if normalized_part:
+        return ("part", normalized_part)
+
+    excel_rows = result.get("excel_rows") or []
+    if result.get("status") == "REVIEW" and excel_rows:
+        return ("blank_excel_row", excel_rows[0])
+
+    return ("result_id", id(result))
+
+
+def _matching_source_records(
+    records: list[dict[str, Any]],
+    source: str,
+    key: tuple[str, Any],
+    used_record_ids: set[int],
+) -> list[dict[str, Any]]:
+    matches: list[dict[str, Any]] = []
+    kind, value = key
+
+    for record in records:
+        if id(record) in used_record_ids:
+            continue
+
+        if kind == "part" and _normalized_part(record) == value:
+            matches.append(record)
+        elif (
+            kind == "blank_excel_row"
+            and source == "excel"
+            and not _normalized_part(record)
+            and record.get("excel_row") == value
+        ):
+            matches.append(record)
+
+    return matches
 
 
 def _existence_text(

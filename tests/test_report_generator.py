@@ -122,9 +122,11 @@ def test_generate_report_swaps_display_order_and_preserves_text_literals(tmp_pat
     sheet = workbook["01_literal_case"]
 
     assert sheet["A2"].value == "001"
-    assert sheet["F2"].value == "=LEAD*01"
-    assert sheet["F2"].data_type == "s"
-    assert sheet["H2"].value == "=desc"
-    assert sheet["H2"].data_type == "s"
+    excel_parts = [sheet[f"F{row}"].value for row in range(2, sheet.max_row + 1)]
+    excel_descriptions = [sheet[f"H{row}"].value for row in range(2, sheet.max_row + 1)]
+    literal_row = excel_parts.index("=LEAD*01") + 2
+    assert sheet[f"F{literal_row}"].data_type == "s"
+    assert excel_descriptions[literal_row - 2] == "=desc"
+    assert sheet[f"H{literal_row}"].data_type == "s"
     assert sheet["D2"].value.startswith("=")
     assert sheet["I2"].value.startswith("=")
