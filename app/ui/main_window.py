@@ -214,6 +214,7 @@ if tk is not None:
             self.bom1_combo: ttk.Combobox | None = None
             self.bom2_combo: ttk.Combobox | None = None
             self._input_controls: list[Any] = []
+            self._control_states: dict[Any, str] = {}
 
             self._configure_window()
             self._build_interface()
@@ -298,6 +299,15 @@ if tk is not None:
             self.bom2_combo.grid(row=0, column=3, padx=(0, 5), pady=4)
 
             self._input_controls.extend([excel_entry, excel_button, pdf_entry, pdf_button, self.bom1_combo])
+            self._control_states.update(
+                {
+                    excel_entry: str(excel_entry.cget("state")),
+                    excel_button: str(excel_button.cget("state")),
+                    pdf_entry: str(pdf_entry.cget("state")),
+                    pdf_button: str(pdf_button.cget("state")),
+                    self.bom1_combo: str(self.bom1_combo.cget("state")),
+                }
+            )
 
         def _build_progress_section(self, parent: ttk.Frame) -> None:
             section = ttk.LabelFrame(parent, text="2. Verification Progress", padding=15)
@@ -504,7 +514,11 @@ if tk is not None:
         def _set_running_state(self, running: bool, report_available: bool = False) -> None:
             self.verification_running = running
             for control in self._input_controls:
-                control.configure(state="disabled" if running else ("readonly" if control is self.bom1_combo else "normal"))
+                control.configure(
+                    state="disabled"
+                    if running
+                    else self._control_states.get(control, "normal")
+                )
             if self.clear_button is not None:
                 self.clear_button.configure(state="disabled" if running else "normal")
             if self.verify_button is not None:

@@ -222,6 +222,7 @@ def _write_summary_sheet(
         "Warnings",
         "Comparison Sheet",
     ]
+    header_row = row
     _write_table_header(worksheet, row, headers, HEADER_GREEN, WHITE)
     row += 1
 
@@ -243,7 +244,7 @@ def _write_summary_sheet(
                 _write_plain_cell(worksheet, row, column, value)
             row += 1
 
-    worksheet.auto_filter.ref = f"A{row - max(len(pair_results), 1)}:G{max(row, 1)}"
+    worksheet.auto_filter.ref = f"A{header_row}:G{max(row - 1, header_row)}"
     _set_widths(
         worksheet,
         {"A": 24, "B": 18, "C": 42, "D": 38, "E": 38, "F": 42, "G": 24},
