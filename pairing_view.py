@@ -1,1 +1,1 @@
-"""Pairing review view placeholder."""
+from app.ui.pairing_view import *

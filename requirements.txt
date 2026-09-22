@@ -4,3 +4,4 @@ PyMuPDF
 pdfplumber
 rapidfuzz
 pytest
+pyinstaller
