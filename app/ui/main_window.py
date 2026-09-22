@@ -402,6 +402,7 @@ if tk is not None:
                 return
 
             self.report_manager.clear_temp_report()
+            report_path = self.report_manager.create_temp_report_path()
             self._reset_results()
             self._set_running_state(True)
             self.status_var.set("Verification started. Processing selected BOM folders locally...")
@@ -409,7 +410,7 @@ if tk is not None:
 
             self._worker = threading.Thread(
                 target=self._verification_worker,
-                args=(excel_folder, pdf_folder, bom1_type, bom2_type),
+                args=(excel_folder, pdf_folder, bom1_type, bom2_type, report_path),
                 daemon=True,
                 name="BOMVerificationWorker",
             )
@@ -422,10 +423,9 @@ if tk is not None:
             pdf_folder: str,
             bom1_type: str,
             bom2_type: str,
+            report_path: Path,
         ) -> None:
             try:
-                self._worker_queue.put(("status", "Creating temporary local report file..."))
-                report_path = self.report_manager.create_temp_report_path()
                 self._worker_queue.put(("status", "Extracting, pairing, verifying, and writing the report..."))
                 result = self.verification_controller.verify(
                     excel_folder=excel_folder,
@@ -436,7 +436,6 @@ if tk is not None:
                 )
                 self._worker_queue.put(("completed", result))
             except Exception as error:  # pragma: no cover - GUI pathway
-                self.report_manager.clear_temp_report()
                 self._worker_queue.put(("failed", error))
 
         def _poll_worker_queue(self) -> None:
@@ -492,6 +491,7 @@ if tk is not None:
                 self.status_var.set("Verification completed. Report is ready to save.")
 
         def _verification_failed(self, error: Exception) -> None:
+            self.report_manager.clear_temp_report()
             self._set_running_state(False, report_available=False)
             self.progress_var.set(0)
             self.status_var.set("Verification failed.")

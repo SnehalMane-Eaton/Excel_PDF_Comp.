@@ -149,6 +149,8 @@ def _normalize_bom_order(bom1_type: str, bom2_type: str) -> tuple[str, str]:
 
     if bom1 not in {"Excel", "Pdf", "PDF"}:
         raise ValueError("BOM1 must be either Excel or PDF.")
+    if bom2 not in {"Excel", "Pdf", "PDF"}:
+        raise ValueError("BOM2 must be either Excel or PDF.")
 
     bom1 = "PDF" if bom1 == "Pdf" else bom1
     bom2 = "PDF" if bom2 == "Pdf" else bom2
@@ -392,7 +394,7 @@ def _build_row_audits(
     for result in verification.get("results", []):
         part_number = result.get("part_number")
         if part_number:
-            result_by_part[str(part_number)] = result
+            result_by_part[normalize_part_number(part_number)] = result
         elif result.get("status") == "REVIEW":
             for excel_row in result.get("excel_rows", []):
                 blank_excel_reviews[excel_row] = result
