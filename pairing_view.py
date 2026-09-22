@@ -1,0 +1,1 @@
+"""Pairing review view placeholder."""

@@ -1,0 +1,6 @@
+{
+  "tests/test_matcher.py": true,
+  "tests/test_normalizer.py": true,
+  "tests/test_pairing.py": true,
+  "tests/test_report.py": true
+}
