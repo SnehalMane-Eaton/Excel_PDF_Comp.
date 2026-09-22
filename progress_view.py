@@ -1,1 +1,1 @@
-"""Progress view placeholder for future threaded batch updates."""
+from app.ui.progress_view import *
